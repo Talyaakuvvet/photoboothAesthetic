@@ -312,3 +312,32 @@ export function saveBlob(blob, filename) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+
+/* ---------- saving to the phone ---------- */
+// iPhone/iPad: a normal download lands in the Files app. The share sheet has
+// "Save Image" / "Save Video", which puts it in Photos. Android galleries
+// already pick up the Downloads folder, so a normal download is right there.
+export const isIOS = () =>
+  /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+
+const canShareFile = (file) => {
+  try { return !!navigator.canShare && navigator.canShare({ files: [file] }); } catch { return false; }
+};
+
+/**
+ * Call straight from a click handler (no await before it), with the blob already in hand,
+ * or iOS refuses to open the share sheet.
+ */
+export async function saveToDevice(blob, filename) {
+  if (isIOS()) {
+    const file = new File([blob], filename, { type: blob.type || (filename.endsWith(".mp4") ? "video/mp4" : "image/jpeg") });
+    if (canShareFile(file)) {
+      try { await navigator.share({ files: [file] }); return "shared"; }
+      catch (e) { if (e && e.name === "AbortError") return "cancelled"; }
+    }
+  }
+  saveBlob(blob, filename);
+  return "downloaded";
+}
+
+export const saveLabel = (what) => (isIOS() ? `${what} galeriye kaydet` : `${what} indir`);

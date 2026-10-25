@@ -4,7 +4,7 @@ import SettingsPanel from "../components/SettingsPanel.jsx";
 import QrCard from "../components/QrCard.jsx";
 import { Icon } from "../components/Icons.jsx";
 import { useSettings } from "../lib/settings.jsx";
-import { canvasToBlob, loadImageFile, renderStrip, sampleFrame, saveBlob, thumbOf } from "../lib/strip.js";
+import { canvasToBlob, isIOS, loadImageFile, renderStrip, sampleFrame, saveLabel, saveToDevice, thumbOf } from "../lib/strip.js";
 import { KEEP_DAYS, sharingEnabled, uploadSession } from "../lib/supabase.js";
 
 const samples = () =>
@@ -21,6 +21,7 @@ export default function Home({ toast }) {
   const [busy, setBusy] = useState(false);
   const [share, setShare] = useState(null); // { state: "uploading" | "done", url }
   const lastCanvas = useRef(null);
+  const lastBlob = useRef(null);
   const bdWarned = useRef(false);
   const galRef = useRef(null), slotRef = useRef(null), slotTarget = useRef(0);
 
@@ -44,6 +45,8 @@ export default function Home({ toast }) {
       });
       if (cancelled) return;
       lastCanvas.current = c;
+      lastBlob.current = null;
+      canvasToBlob(c, "image/jpeg", 0.93).then((b) => { if (lastCanvas.current === c) lastBlob.current = b; });
       setStripUrl(c.toDataURL("image/jpeg", 0.9));
       setBusy(false);
     }, 60);
@@ -80,7 +83,9 @@ export default function Home({ toast }) {
 
   async function download() {
     if (!lastCanvas.current) return;
-    saveBlob(await canvasToBlob(lastCanvas.current, "image/jpeg", 0.93), "photobooth-serit.jpg");
+    const blob = lastBlob.current || (await canvasToBlob(lastCanvas.current, "image/jpeg", 0.93));
+    const r = await saveToDevice(blob, "photobooth-serit.jpg");
+    if (r === "downloaded" && isIOS()) toast("Dosyalar'a indi. Galeriye kaydetmek için tekrar bas ve “Görüntüyü Kaydet”i seç.");
   }
 
   async function shareStrip() {
@@ -149,7 +154,7 @@ export default function Home({ toast }) {
           <SettingsPanel startNum={2} />
 
           <div className="btn-row">
-            <button className="btn primary" type="button" disabled={!full} onClick={download}><Icon name="download" />Şeridi indir</button>
+            <button className="btn primary" type="button" disabled={!full} onClick={download}><Icon name="download" />{saveLabel("Şeridi")}</button>
             <button className="btn" type="button" onClick={() => update({ seed: (Math.random() * 1e9) | 0 })}><Icon name="refresh" />Yeni baskı</button>
             {sharingEnabled && (
               <button className="btn" type="button" disabled={!full || hasSamples || share?.state === "uploading"} onClick={shareStrip}>

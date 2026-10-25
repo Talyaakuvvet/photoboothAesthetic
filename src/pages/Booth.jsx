@@ -4,7 +4,7 @@ import SettingsPanel from "../components/SettingsPanel.jsx";
 import QrCard from "../components/QrCard.jsx";
 import { Icon } from "../components/Icons.jsx";
 import { useSettings } from "../lib/settings.jsx";
-import { canvasToBlob, renderStrip, saveBlob } from "../lib/strip.js";
+import { canvasToBlob, isIOS, renderStrip, saveLabel, saveToDevice } from "../lib/strip.js";
 import { KEEP_DAYS, sharingEnabled, uploadSession } from "../lib/supabase.js";
 
 // Stage = what the guest sees AND what gets recorded (3:4 portrait, like a booth frame).
@@ -109,11 +109,11 @@ export default function Booth() {
     const pattern = ctx.createPattern(noise, "repeat");
     const vig = ctx.createRadialGradient(SW / 2, SH * 0.45, SH * 0.3, SW / 2, SH * 0.45, SH * 0.75);
     vig.addColorStop(0, "rgba(0,0,0,0)"); vig.addColorStop(1, "rgba(0,0,0,0.55)");
-    const small = document.createElement("canvas"); small.width = 192; small.height = 256;
+    const small = document.createElement("canvas"); small.width = 288; small.height = 384;
     const sctx = small.getContext("2d");
     const frame = document.createElement("canvas"); frame.width = SW; frame.height = SH;
     const fctx = frame.getContext("2d");
-    const maskCv = document.createElement("canvas"), scratch = {};
+    const maskCv = document.createElement("canvas"), scratch = {}, maskState = {};
     let lastSeg = 0, hasMask = false;
 
     const draw = (now) => {
@@ -125,8 +125,8 @@ export default function Booth() {
       if (v && v.videoWidth && live && s.backdrop && s.backdrop !== "none") {
         if (now - lastSeg > 66) { // ~15 masks per second is plenty
           lastSeg = now;
-          drawCover(sctx, v, 192, 256, mirror);
-          try { hasMask = !!live.mod.writeMask(live.seg.segmentForVideo(small, now), maskCv); } catch { hasMask = false; }
+          drawCover(sctx, v, 288, 384, mirror);
+          try { hasMask = !!live.mod.writeMask(live.seg.segmentForVideo(small, now), maskCv, small, maskState); } catch { hasMask = false; }
         }
         if (hasMask) {
           drawCover(fctx, v, SW, SH, mirror);
@@ -352,13 +352,14 @@ export default function Booth() {
                   <button className="btn" type="button" onClick={retryUpload}>Tekrar yükle</button>
                 </div>
               )}
+              {isIOS() && <p className="hint">Açılan menüde “Görüntüyü Kaydet” ya da “Videoyu Kaydet”e bas, Fotoğraflar'a gelir.</p>}
               <div className="btn-row">
-                <button className="btn primary" type="button" onClick={() => saveBlob(result.stripBlob, "photobooth-serit.jpg")}>
-                  <Icon name="download" />Şeridi indir
+                <button className="btn primary" type="button" onClick={() => saveToDevice(result.stripBlob, "photobooth-serit.jpg")}>
+                  <Icon name="download" />{saveLabel("Şeridi")}
                 </button>
                 {result.videoBlob && (
-                  <button className="btn" type="button" onClick={() => saveBlob(result.videoBlob, `photobooth-video.${vidExt}`)}>
-                    <Icon name="video" />Videoyu indir
+                  <button className="btn" type="button" onClick={() => saveToDevice(result.videoBlob, `photobooth-video.${vidExt}`)}>
+                    <Icon name="video" />{saveLabel("Videoyu")}
                   </button>
                 )}
                 <button className="btn" type="button" onClick={() => { setPhase("setup"); setShare(null); }}>
